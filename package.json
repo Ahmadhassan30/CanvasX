@@ -51,7 +51,7 @@
   "prettier": "@excalidraw/prettier-config",
   "scripts": {
     "ai:dev": "cd canvasx-api && bun run src/index.ts",
-    "dev:full": "concurrently --names \"app,ai\" --prefix-colors \"cyan,magenta\" \"yarn start\" \"yarn ai:dev\"",
+    "dev:full": "concurrently --names \"app,ai\" --prefix-colors \"cyan,magenta\" \"corepack yarn start\" \"corepack yarn ai:dev\"",
     "build-node": "node ./scripts/build-node.js",
     "build:app:docker": "yarn --cwd ./excalidraw-app build:app:docker",
     "build:app": "yarn --cwd ./excalidraw-app build:app",

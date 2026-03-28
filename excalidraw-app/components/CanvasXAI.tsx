@@ -233,7 +233,7 @@ export const CanvasXAI: React.FC<CanvasXAIProps> = ({
       setStage("idle");
       reader.releaseLock();
     }
-  }, [input, mode, isGenerating, excalidrawAPI, updateScene, reset]);
+  }, [input, mode, isGenerating, insertElements, getExistingIds, reset]);
 
   const handleRetry = useCallback(() => {
     setErrorMessage("");
