@@ -1,0 +1,23 @@
+{
+  "name": "canvasx-api",
+  "version": "1.0.0",
+  "description": "AI backend for CanvasX — Excalidraw diagram generation via LangGraph + Groq",
+  "module": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "dev": "bun --watch run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@langchain/core": "^0.3.40",
+    "@langchain/groq": "^0.1.3",
+    "@langchain/langgraph": "^0.2.67",
+    "hono": "^4.7.5"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.2"
+  }
+}
