@@ -168,6 +168,23 @@ const LayerUI = ({
   // ── CanvasX AI panel toggle ──────────────────────────────────────────────
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
 
+  // Ctrl/Cmd + Shift + A  →  toggle AI panel
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        e.key === "A" &&
+        e.shiftKey &&
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        setAiPanelOpen((v) => !v);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   const spacing = isCompactStylesPanel
     ? {
         menuTopGap: 4,
@@ -696,19 +713,16 @@ const LayerUI = ({
               }}
             >
               <CanvasXAI
-                updateScene={(data) => {
-                  const existing = app.scene.getNonDeletedElements();
-                  app.updateScene({
-                    elements: [
-                      ...(existing as unknown as any[]),
-                      ...(data.elements as any[]),
-                    ],
-                    ...(data.appState
-                      ? { appState: data.appState as any }
-                      : {}),
-                  });
+                insertElements={(elements) => {
+                  app.onInsertElements(elements as any);
                 }}
-                excalidrawAPI={null}
+                getExistingIds={() =>
+                  new Set(
+                    app.scene
+                      .getNonDeletedElements()
+                      .map((el) => el.id),
+                  )
+                }
                 onClose={() => setAiPanelOpen(false)}
               />
             </div>

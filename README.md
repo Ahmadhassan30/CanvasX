@@ -122,3 +122,104 @@ If you like the project, you can become a sponsor at [Open Collective](https://o
 Last but not least, we're thankful to these companies for offering their services for free:
 
 [![Vercel](./.github/assets/vercel.svg)](https://vercel.com) [![Sentry](./.github/assets/sentry.svg)](https://sentry.io) [![Crowdin](./.github/assets/crowdin.svg)](https://crowdin.com)
+
+---
+
+## CanvasX AI Agent
+
+CanvasX extends Excalidraw with a local AI backend that converts natural-language topics
+into fully-rendered diagrams directly on the canvas.
+
+### What it does
+
+- Accepts a free-text prompt or pasted content via a side panel in the editor
+- Classifies the content into one of five diagram types: **Mindmap**, **Flowchart**, **Study Notes**, **Timeline**, or **Comparison**
+- Streams live progress updates back to the UI as the agent works through its pipeline
+- Renders the final diagram as native Excalidraw elements, merged with any existing canvas content
+
+The backend is a 4-stage [LangGraph](https://langchain-ai.github.io/langgraphjs/) pipeline:
+
+```
+analyze → plan → generate → validate
+                    ↑              ↓ (if invalid, max 3 retries)
+                  refine ←────────┘
+```
+
+### Setup
+
+**1. Get a Groq API key**
+
+Sign up at [console.groq.com](https://console.groq.com) — the free tier is sufficient for development.
+
+**2. Create the environment file**
+
+```bash
+cp canvasx-api/.env.example canvasx-api/.env
+# then edit canvasx-api/.env and set:
+#   GROQ_API_KEY=gsk_...
+```
+
+**3. Install dependencies**
+
+```bash
+# Root workspace (installs concurrently)
+yarn install
+
+# AI backend (installs Hono, LangGraph, etc.)
+cd canvasx-api && bun install
+```
+
+### Running both servers
+
+```bash
+# From the repo root — starts Excalidraw (port 3000) + AI API (port 3001) together
+yarn dev:full
+```
+
+Or start them separately:
+
+```bash
+# Terminal 1 — Excalidraw frontend
+yarn start
+
+# Terminal 2 — AI backend
+yarn ai:dev
+```
+
+**Mock mode** (no API key required — returns sample elements for UI testing):
+
+```bash
+cd canvasx-api
+CANVASX_MOCK=true bun run src/index.ts
+```
+
+### Using the panel
+
+1. Open the editor at `http://localhost:3000`
+2. Click the **✦ wand button** in the top-right toolbar, or press `Ctrl+Shift+A` (`Cmd+Shift+A` on Mac)
+3. Choose a diagram type, type or paste your content, and click **Generate**
+4. Elements stream onto the canvas as the pipeline completes
+
+### API reference
+
+| Method | URL | Description |
+|--------|-----|-------------|
+| `POST` | `/api/agent/generate` | Generate diagram (SSE stream) |
+| `GET`  | `/api/agent/health` | Liveness probe + cache stats |
+
+**Request body:**
+```json
+{
+  "input": "Explain the water cycle",
+  "mode": "mindmap"
+}
+```
+
+**SSE events:**
+| Event | Payload |
+|-------|---------|
+| `status` | `{ stage, message }` |
+| `elements` | `{ elements[], appState }` |
+| `done` | `{ success, elementCount, cached, diagramType, topic }` |
+| `error` | `{ message }` |
+

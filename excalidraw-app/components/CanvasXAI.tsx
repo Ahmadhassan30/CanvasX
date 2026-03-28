@@ -1,5 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import React, { useState, useCallback } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,11 +22,10 @@ interface ExcalidrawElement {
 }
 
 interface CanvasXAIProps {
-  updateScene: (data: {
-    elements: ExcalidrawElement[];
-    appState?: object;
-  }) => void;
-  excalidrawAPI: ExcalidrawImperativeAPI | null;
+  /** Insert new elements into the canvas (deduplication handled here) */
+  insertElements: (elements: ExcalidrawElement[]) => void;
+  /** Returns the set of element IDs currently on the canvas */
+  getExistingIds: () => Set<string>;
   onClose: () => void;
 }
 
@@ -97,8 +95,8 @@ const WandIcon = () => (
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const CanvasXAI: React.FC<CanvasXAIProps> = ({
-  updateScene,
-  excalidrawAPI,
+  insertElements,
+  getExistingIds,
   onClose,
 }) => {
   const [mode, setMode] = useState<DiagramMode>("mindmap");
@@ -107,21 +105,11 @@ export const CanvasXAI: React.FC<CanvasXAIProps> = ({
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [addedCount, setAddedCount] = useState<number | null>(null);
-  const esRef = useRef<EventSource | null>(null);
 
   const isGenerating = stage !== "idle";
   const remaining = MAX_CHARS - input.length;
 
-  // Close any open EventSource on unmount
-  useEffect(() => {
-    return () => {
-      esRef.current?.close();
-    };
-  }, []);
-
   const reset = useCallback(() => {
-    esRef.current?.close();
-    esRef.current = null;
     setStage("idle");
     setStatusMessage("");
     setErrorMessage("");
@@ -195,16 +183,18 @@ export const CanvasXAI: React.FC<CanvasXAIProps> = ({
         } else if (event === "elements") {
           const newElements: ExcalidrawElement[] = payload.elements ?? [];
           if (newElements.length > 0) {
-            const existing =
-              excalidrawAPI?.getSceneElementsIncludingDeleted() ?? [];
-            updateScene({
-              elements: [
-                ...(existing as unknown as ExcalidrawElement[]),
-                ...newElements,
-              ],
-              appState: payload.appState,
-            });
-            setAddedCount(newElements.length);
+            // ── Gather existing element ids ────────────────────────────
+            const existingIds = getExistingIds();
+
+            // ── Deduplicate: drop AI elements whose id already exists ───
+            const deduped = newElements.filter(
+              (el) => !existingIds.has((el as { id?: string }).id ?? ""),
+            );
+
+            if (deduped.length > 0) {
+              insertElements(deduped);
+              setAddedCount(deduped.length);
+            }
           }
         } else if (event === "done") {
           setStage("idle");
