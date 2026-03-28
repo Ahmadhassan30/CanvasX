@@ -20,29 +20,36 @@ function routeAfterValidate(state: State): "refineNode" | typeof END {
 }
 
 // ─── Build graph ──────────────────────────────────────────────────────────────
+// IMPORTANT: In @langchain/langgraph TypeScript, each addNode() call returns a
+// NEW builder whose generic type includes the newly registered node name.
+// All addEdge / addConditionalEdges calls must be made on this accumulated
+// typed value — never on the original StateGraph instance — otherwise TS
+// reports that the node name is not assignable to "__start__" | "__end__".
 
-const builder = new StateGraph(AgentStateAnnotation);
-
-builder
+export const agentGraph = new StateGraph(AgentStateAnnotation)
+  // ── Register nodes ────────────────────────────────────────────────────────
   .addNode("analyzeNode", analyzeNode)
   .addNode("planNode", planNode)
   .addNode("generateNode", generateNode)
   .addNode("validateNode", validateNode)
-  .addNode("refineNode", refineNode);
+  .addNode("refineNode", refineNode)
 
-// Linear pipeline entry
-builder.addEdge(START, "analyzeNode");
-builder.addEdge("analyzeNode", "planNode");
-builder.addEdge("planNode", "generateNode");
-builder.addEdge("generateNode", "validateNode");
+  // ── Linear pipeline ───────────────────────────────────────────────────────
+  .addEdge(START, "analyzeNode")
+  .addEdge("analyzeNode", "planNode")
+  .addEdge("planNode", "generateNode")
+  .addEdge("generateNode", "validateNode")
 
-// Validate → refine (retry) or END
-builder.addConditionalEdges("validateNode", routeAfterValidate, {
-  refineNode: "refineNode",
-  [END]: END,
-});
+  // ── Conditional retry loop ────────────────────────────────────────────────
+  // validate → refine   (if !isValid && iterationCount < MAX_ITERATIONS)
+  // validate → END      (if isValid  || iterationCount >= MAX_ITERATIONS)
+  .addConditionalEdges("validateNode", routeAfterValidate, {
+    refineNode: "refineNode",
+    [END]: END,
+  })
 
-// After refining, re-validate
-builder.addEdge("refineNode", "validateNode");
+  // After refining, re-validate
+  .addEdge("refineNode", "validateNode")
 
-export const agentGraph = builder.compile();
+  // ── Compile ───────────────────────────────────────────────────────────────
+  .compile();
