@@ -18,7 +18,8 @@ app.use(
     origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
-    exposeHeaders: ["Content-Type"],
+    // Expose X-Cache so the browser can read cache-hit headers
+    exposeHeaders: ["Content-Type", "X-Cache"],
     maxAge: 600,
     credentials: false,
   })
@@ -28,12 +29,15 @@ app.use(
 
 app.route("/api/agent", agentRoute);
 
-// Root probe — useful for container health checks
+// Root probe
 app.get("/", (c) =>
   c.json({
     name: "canvasx-api",
     version: "1.0.0",
-    docs: "/api/agent/health",
+    endpoints: {
+      generate: "POST /api/agent/generate",
+      health: "GET  /api/agent/health",
+    },
   })
 );
 
@@ -42,7 +46,7 @@ app.notFound((c) =>
   c.json({ error: "Not found", path: c.req.path }, 404)
 );
 
-// Unhandled error boundary
+// Global error boundary
 app.onError((err, c) => {
   console.error("[server] unhandled error:", err);
   return c.json({ error: "Internal server error" }, 500);
@@ -51,9 +55,9 @@ app.onError((err, c) => {
 // ─── Start ───────────────────────────────────────────────────────────────────
 
 serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`\n🚀 canvasx-api running on http://localhost:${info.port}`);
-  console.log(`   POST http://localhost:${info.port}/api/agent/generate`);
-  console.log(`   GET  http://localhost:${info.port}/api/agent/health\n`);
+  console.log(`\n🚀  canvasx-api  →  http://localhost:${info.port}`);
+  console.log(`    POST  /api/agent/generate   (SSE streaming)`);
+  console.log(`    GET   /api/agent/health     (liveness + cache stats)\n`);
 });
 
 export default app;
