@@ -28,3 +28,5 @@ html
 meta*.json
 .claude
 /skills/
+
+canvasx-api/.env
