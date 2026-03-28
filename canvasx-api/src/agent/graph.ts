@@ -1,69 +1,48 @@
 import { StateGraph, START, END } from "@langchain/langgraph";
-import { AgentStateAnnotation } from "./state.ts";
+import { AgentStateAnnotation, MAX_ITERATIONS } from "./state.ts";
 import { analyzeNode } from "./nodes/analyze.ts";
 import { planNode } from "./nodes/plan.ts";
 import { generateNode } from "./nodes/generate.ts";
 import { validateNode } from "./nodes/validate.ts";
+import { refineNode } from "./nodes/refine.ts";
 
-const MAX_RETRIES = 2;
+type State = typeof AgentStateAnnotation.State;
 
 /**
- * Routing function after the validate node.
- * Returns to "generate" if validation failed and retries remain,
- * otherwise exits to END.
+ * After validate: route to refineNode if validation failed and we still have
+ * retries left; otherwise exit the graph.
  */
-function routeAfterValidate(
-  state: typeof AgentStateAnnotation.State
-): "generate" | typeof END {
-  if (!state.isValid && state.retryCount <= MAX_RETRIES) {
-    console.log(
-      `[graph] validation failed (attempt ${state.retryCount}/${MAX_RETRIES}) — retrying generate`
-    );
-    return "generate";
+function routeAfterValidate(state: State): "refineNode" | typeof END {
+  if (!state.isValid && state.iterationCount < MAX_ITERATIONS) {
+    return "refineNode";
   }
   return END;
 }
 
-/**
- * Routing function after any node that might set state.error.
- * Short-circuits to END if an error was recorded.
- */
-function routeOnError(
-  state: typeof AgentStateAnnotation.State,
-  next: string
-): string | typeof END {
-  return state.error ? END : next;
-}
-
-// ─── Build Graph ─────────────────────────────────────────────────────────────
+// ─── Build graph ──────────────────────────────────────────────────────────────
 
 const builder = new StateGraph(AgentStateAnnotation);
 
 builder
-  .addNode("analyze", analyzeNode)
-  .addNode("plan", planNode)
-  .addNode("generate", generateNode)
-  .addNode("validate", validateNode);
+  .addNode("analyzeNode", analyzeNode)
+  .addNode("planNode", planNode)
+  .addNode("generateNode", generateNode)
+  .addNode("validateNode", validateNode)
+  .addNode("refineNode", refineNode);
 
-// Entry → analyze
-builder.addEdge(START, "analyze");
+// Linear pipeline entry
+builder.addEdge(START, "analyzeNode");
+builder.addEdge("analyzeNode", "planNode");
+builder.addEdge("planNode", "generateNode");
+builder.addEdge("generateNode", "validateNode");
 
-// analyze → plan (or END on error)
-builder.addConditionalEdges("analyze", (state) =>
-  routeOnError(state, "plan")
-);
+// Validate → refine (retry) or END
+builder.addConditionalEdges("validateNode", routeAfterValidate, {
+  refineNode: "refineNode",
+  [END]: END,
+});
 
-// plan → generate (or END on error)
-builder.addConditionalEdges("plan", (state) =>
-  routeOnError(state, "generate")
-);
-
-// generate → validate (or END on error)
-builder.addConditionalEdges("generate", (state) =>
-  routeOnError(state, "validate")
-);
-
-// validate → generate (retry) or END
-builder.addConditionalEdges("validate", routeAfterValidate);
+// After refining, re-validate
+builder.addEdge("refineNode", "validateNode");
 
 export const agentGraph = builder.compile();

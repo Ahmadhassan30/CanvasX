@@ -1,80 +1,85 @@
 import { Annotation } from "@langchain/langgraph";
 import type { ExcalidrawElement } from "../types/excalidraw.ts";
 
-// ─── LangGraph State Definition ──────────────────────────────────────────────
-// Each field uses Annotation to declare its reducer strategy.
-// Fields without a reducer are overwritten on each update (last-write wins).
-// Fields with a reducer accumulate values across node updates.
+// ─── Diagram type enum ────────────────────────────────────────────────────────
+export type DiagramType =
+  | "mindmap"
+  | "flowchart"
+  | "studynotes"
+  | "timeline"
+  | "comparison"
+  | null;
 
+// ─── Planned structure shape ──────────────────────────────────────────────────
+export interface PlannedNode {
+  id: string;
+  label: string;
+  shape: "rectangle" | "ellipse" | "diamond";
+  level: number;    // 0 = root, 1 = primary, 2 = secondary …
+  row: number;
+  col: number;
+  color: string;
+  children: string[]; // child node ids
+}
+
+export interface PlannedEdge {
+  from: string;
+  to: string;
+  label?: string;
+  style?: "solid" | "dashed";
+}
+
+export interface PlannedStructure {
+  layout: "horizontal" | "vertical" | "radial" | "grid" | "tree";
+  colorScheme: "blue" | "green" | "purple" | "orange" | "mono";
+  nodes: PlannedNode[];
+  edges: PlannedEdge[];
+}
+
+// ─── State definition ─────────────────────────────────────────────────────────
 export const AgentStateAnnotation = Annotation.Root({
-  /**
-   * The raw natural-language prompt submitted by the user.
-   * Immutable after the first write — set once in the entry route.
-   */
-  userPrompt: Annotation<string>({
+  /** Raw natural-language input from the user. Set once, never mutated. */
+  input: Annotation<string>({
     reducer: (_prev, next) => next,
     default: () => "",
   }),
 
-  /**
-   * Structured analysis of the user's intent produced by the analyze node.
-   * Describes diagram type, entities, relationships, and tone.
-   */
-  analysis: Annotation<{
-    diagramType: string;
-    entities: string[];
-    relationships: string[];
-    style: string;
-    complexity: "simple" | "medium" | "complex";
-  } | null>({
+  /** Detected diagram type; null until the analyze node runs. */
+  diagramType: Annotation<DiagramType>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+
+  /** Canonical topic extracted from the user input. */
+  topic: Annotation<string>({
+    reducer: (_prev, next) => next,
+    default: () => "",
+  }),
+
+  /** Key concepts / bullet points extracted from the user input. */
+  keyPoints: Annotation<string[]>({
+    reducer: (_prev, next) => next,
+    default: () => [],
+  }),
+
+  /** Hierarchical layout plan produced by the plan node. */
+  plannedStructure: Annotation<PlannedStructure | null>({
     reducer: (_prev, next) => next,
     default: () => null,
   }),
 
   /**
-   * High-level layout plan produced by the plan node.
-   * Describes element positions, groupings, and flow direction.
+   * Raw Excalidraw elements produced by the generate node.
+   * Replaced wholesale on every generate / refine pass.
    */
-  plan: Annotation<{
-    layout: "horizontal" | "vertical" | "radial" | "grid";
-    nodes: Array<{
-      id: string;
-      label: string;
-      type: "shape" | "text" | "frame";
-      shape: "rectangle" | "ellipse" | "diamond";
-      row: number;
-      col: number;
-    }>;
-    edges: Array<{
-      from: string;
-      to: string;
-      label?: string;
-    }>;
-  } | null>({
-    reducer: (_prev, next) => next,
-    default: () => null,
-  }),
-
-  /**
-   * Generated Excalidraw JSON elements produced by the generate node.
-   * Fully typed; populated after successful generation.
-   */
-  elements: Annotation<ExcalidrawElement[]>({
+  generatedElements: Annotation<ExcalidrawElement[]>({
     reducer: (_prev, next) => next,
     default: () => [],
   }),
 
   /**
-   * Whether the last validation step approved the generated elements.
-   */
-  isValid: Annotation<boolean>({
-    reducer: (_prev, next) => next,
-    default: () => false,
-  }),
-
-  /**
-   * Accumulated validation errors from the validate node.
-   * Appends across retries so the full error history is preserved.
+   * Validation error strings from the validate node.
+   * Accumulated across retries so the full history is preserved.
    */
   validationErrors: Annotation<string[]>({
     reducer: (prev, next) => [...prev, ...next],
@@ -82,21 +87,40 @@ export const AgentStateAnnotation = Annotation.Root({
   }),
 
   /**
-   * Number of generate→validate retry attempts consumed.
-   * Used to enforce a maximum retry cap and prevent infinite loops.
+   * Number of generate→validate→refine cycles consumed.
+   * Each refine pass increments by 1. Max is 3.
    */
-  retryCount: Annotation<number>({
+  iterationCount: Annotation<number>({
     reducer: (prev, next) => prev + next,
     default: () => 0,
   }),
 
-  /**
-   * Terminal error message if the pipeline fails unrecoverably.
-   */
-  error: Annotation<string | null>({
+  /** Whether the last validate pass approved the elements. */
+  isValid: Annotation<boolean>({
     reducer: (_prev, next) => next,
-    default: () => null,
+    default: () => false,
+  }),
+
+  /**
+   * Final, validated Excalidraw elements ready for the client.
+   * Written only when isValid is true.
+   */
+  finalElements: Annotation<ExcalidrawElement[]>({
+    reducer: (_prev, next) => next,
+    default: () => [],
+  }),
+
+  /**
+   * Ordered log of progress messages streamed back to the client.
+   * Appended by each node.
+   */
+  streamChunks: Annotation<string[]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
   }),
 });
 
 export type AgentState = typeof AgentStateAnnotation.State;
+
+/** Hard cap on generate→validate→refine iterations. */
+export const MAX_ITERATIONS = 3;
