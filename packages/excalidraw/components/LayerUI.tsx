@@ -1,5 +1,6 @@
 import clsx from "clsx";
-import React from "react";
+import React, { useState } from "react";
+import { CanvasXAI } from "../../../excalidraw-app/components/CanvasXAI";
 
 import {
   CLASSES,
@@ -163,6 +164,9 @@ const LayerUI = ({
   const stylesPanelMode = useStylesPanelMode();
   const isCompactStylesPanel = stylesPanelMode === "compact";
   const tunnels = useInitializeTunnels();
+
+  // ── CanvasX AI panel toggle ──────────────────────────────────────────────
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
 
   const spacing = isCompactStylesPanel
     ? {
@@ -418,6 +422,54 @@ const LayerUI = ({
                 appState.openSidebar?.name !== DEFAULT_SIDEBAR.name) && (
                 <tunnels.DefaultSidebarTriggerTunnel.Out />
               )}
+            {/* ── CanvasX AI toggle button ─────────────────────────── */}
+            {!appState.viewModeEnabled && (
+              <button
+                type="button"
+                id="canvasx-ai-toggle"
+                aria-label="Toggle CanvasX AI panel"
+                aria-pressed={aiPanelOpen}
+                title="CanvasX AI"
+                onClick={() => setAiPanelOpen((v) => !v)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 36,
+                  height: 36,
+                  borderRadius: "var(--border-radius-md, 6px)",
+                  border: `1.5px solid ${
+                    aiPanelOpen
+                      ? "var(--color-primary)"
+                      : "var(--color-border)"
+                  }`,
+                  background: aiPanelOpen
+                    ? "var(--color-primary)"
+                    : "var(--island-bg-color, var(--color-surface-low))",
+                  color: aiPanelOpen
+                    ? "var(--color-primary-contrast)"
+                    : "var(--color-on-surface)",
+                  cursor: "pointer",
+                  boxShadow: "var(--shadow-island)",
+                  transition: "all 0.13s ease",
+                  flexShrink: 0,
+                }}
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5" />
+                </svg>
+              </button>
+            )}
             {shouldShowStats && (
               <Stats
                 app={app}
@@ -633,6 +685,34 @@ const LayerUI = ({
             )}
           </div>
           {renderSidebars()}
+          {/* ── CanvasX AI panel ───────────────────────────────────── */}
+          {aiPanelOpen && (
+            <div
+              style={{
+                position: "fixed",
+                top: 60,
+                right: 12,
+                zIndex: 10,
+              }}
+            >
+              <CanvasXAI
+                updateScene={(data) => {
+                  const existing = app.scene.getNonDeletedElements();
+                  app.updateScene({
+                    elements: [
+                      ...(existing as unknown as any[]),
+                      ...(data.elements as any[]),
+                    ],
+                    ...(data.appState
+                      ? { appState: data.appState as any }
+                      : {}),
+                  });
+                }}
+                excalidrawAPI={null}
+                onClose={() => setAiPanelOpen(false)}
+              />
+            </div>
+          )}
         </>
       )}
     </>
